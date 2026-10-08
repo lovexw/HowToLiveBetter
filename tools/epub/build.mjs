@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname, posix } from 'node:path';
 import { deflateRawSync } from 'node:zlib';
-import { Marked } from 'marked';
+import { Marked, Tokenizer } from 'marked';
 import { ROOT, REPO, SITE, TITLE, read, readBook, gitCommit, buildStamp, stripBackLink } from '../lib/book.mjs';
 
 const OUT = resolve(ROOT, process.argv[2] ?? 'dist/HowToLiveBetter.epub');
@@ -47,7 +47,7 @@ ${commitLine}
 
 正文里指向仓库内其他文件的链接已改成书内跳转；指向核实记录、许可证这类没收进书的文件的链接改成了 GitHub 网址。
 
-全书以 Unlicense 发布，属于公有领域，可以随意复制、修改、分发。`;
+正文以 CC BY 4.0 发布（https://creativecommons.org/licenses/by/4.0/）。可以转载、改编、商用，要写明出处「高性价比人生指南」并附仓库链接，改过内容的要注明改过。`;
 }
 
 // ---------- Markdown → XHTML ----------
@@ -55,6 +55,16 @@ let current = null; // 正在转换的页
 let headingSeq = 0;
 const marked = new Marked({ gfm: true });
 marked.use({
+  // GFM 的裸网址自动链接只在空白处断开，「www.12333.gov.cn网页、手机12333客户端」这种
+  // 中文紧贴网址的写法会把后面整串中文都吞进链接，epubcheck 判为非法 URL（RSC-020）。
+  // 裸网址里本来就不该有非 ASCII 字符，遇到就截在那里，截下的前半段照常按默认规则建链接。
+  tokenizer: {
+    url(src) {
+      const tok = Tokenizer.prototype.url.call(this, src);
+      if (!tok || /^[\x21-\x7e]*$/.test(tok.raw)) return tok;
+      return Tokenizer.prototype.url.call(this, tok.raw.match(/^[\x21-\x7e]*/)[0]);
+    },
+  },
   renderer: {
     heading({ tokens, depth }) {
       const html = this.parser.parseInline(tokens);
@@ -163,7 +173,7 @@ const opf = `<?xml version="1.0" encoding="UTF-8"?>
 <dc:creator>eternity4719</dc:creator>
 <dc:description>${esc(description)}</dc:description>
 <dc:source>${REPO}</dc:source>
-<dc:rights>Unlicense（公有领域）</dc:rights>
+<dc:rights>CC BY 4.0（https://creativecommons.org/licenses/by/4.0/）</dc:rights>
 <dc:date>${NOW.toISOString().slice(0, 10)}</dc:date>
 <meta property="dcterms:modified">${modified}</meta>
 <meta name="cover" content="cover-img"/>
